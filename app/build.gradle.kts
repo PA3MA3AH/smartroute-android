@@ -5,6 +5,11 @@ plugins {
 
 android {
     namespace = "com.pa3ma3ah.smartroute"
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -40,6 +45,8 @@ android {
 }
 
 dependencies {
+    implementation(files("libs/libbox.aar"))
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)

@@ -24,7 +24,8 @@ object SmartRouteEngine {
 
         SmartRouteLogStore.add("Engine starting")
         SmartRouteLogStore.add("Config path: $configPath")
-
+        SmartRouteLogStore.add(LibboxProbe.check())
+        
         val configFile = File(configPath)
 
         if (configFile.exists()) {
