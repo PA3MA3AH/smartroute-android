@@ -1,7 +1,6 @@
 package com.pa3ma3ah.smartroute
 
-import android.content.Context
-import android.os.ParcelFileDescriptor
+import android.net.VpnService
 import io.nekohasekai.libbox.CommandServer
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.OverrideOptions
@@ -11,14 +10,14 @@ import java.util.UUID
 
 object SmartRouteEngine {
     private var running: Boolean = false
+    private var setupDone: Boolean = false
     private var currentConfigPath: String = "unknown"
     private var commandServer: CommandServer? = null
 
     @Synchronized
     fun start(
-        context: Context,
-        configPath: String,
-        vpnInterface: ParcelFileDescriptor?
+        context: VpnService,
+        configPath: String
     ) {
         if (running) {
             SmartRouteLogStore.add("Engine already running")
@@ -45,17 +44,11 @@ object SmartRouteEngine {
             SmartRouteLogStore.add("Warning: SmartRoute config file does not exist")
         }
 
-        if (vpnInterface != null) {
-            SmartRouteLogStore.add("VPN interface fd opened")
-        } else {
-            SmartRouteLogStore.add("Warning: VPN interface is null")
-        }
-
-        val singBoxConfig = generateTestSingBoxJson(context)
+        val singBoxConfig = generateTunTestSingBoxJson(context)
         val configJson = singBoxConfig.readText()
 
-        SmartRouteLogStore.add("Generated sing-box config: ${singBoxConfig.absolutePath}")
-        SmartRouteLogStore.add("Generated sing-box config size: ${singBoxConfig.length()} bytes")
+        SmartRouteLogStore.add("Generated TUN sing-box config: ${singBoxConfig.absolutePath}")
+        SmartRouteLogStore.add("Generated TUN config size: ${singBoxConfig.length()} bytes")
 
         if (!checkSingBoxConfig(configJson)) {
             SmartRouteLogStore.add("Engine start aborted: invalid config")
@@ -65,9 +58,11 @@ object SmartRouteEngine {
         try {
             setupLibbox(context)
 
-            val platform = AndroidLibboxPlatform(context.applicationContext) { vpnInterface }
+            val platform = AndroidLibboxPlatform(context)
             val handler = AndroidCommandServerHandler()
             val server = CommandServer(handler, platform)
+
+            commandServer = server
 
             SmartRouteLogStore.add("CommandServer created")
 
@@ -75,14 +70,15 @@ object SmartRouteEngine {
             SmartRouteLogStore.add("CommandServer started")
 
             server.startOrReloadService(configJson, OverrideOptions())
-            SmartRouteLogStore.add("libbox service started/reloaded")
+            SmartRouteLogStore.add("libbox TUN service started/reloaded")
 
-            commandServer = server
             running = true
 
-            SmartRouteLogStore.add("Engine started with libbox CommandServer")
+            SmartRouteLogStore.add("Engine started with libbox TUN")
         } catch (e: Throwable) {
-            SmartRouteLogStore.add("ERROR: failed to start libbox service: ${e::class.java.simpleName}: ${e.message}")
+            SmartRouteLogStore.add(
+                "ERROR: failed to start libbox TUN service: ${e::class.java.simpleName}: ${e.message}"
+            )
 
             try {
                 commandServer?.close()
@@ -133,7 +129,12 @@ object SmartRouteEngine {
         return currentConfigPath
     }
 
-    private fun setupLibbox(context: Context) {
+    private fun setupLibbox(context: VpnService) {
+        if (setupDone) {
+            SmartRouteLogStore.add("Libbox.setup already done")
+            return
+        }
+
         val baseDir = File(context.filesDir, "libbox")
         val workDir = File(baseDir, "work")
         val tempDir = File(context.cacheDir, "libbox-temp")
@@ -154,14 +155,15 @@ object SmartRouteEngine {
         }
 
         Libbox.setup(options)
+        setupDone = true
 
         SmartRouteLogStore.add("Libbox.setup OK")
         SmartRouteLogStore.add("Libbox basePath: ${baseDir.absolutePath}")
         SmartRouteLogStore.add("Libbox workingPath: ${workDir.absolutePath}")
     }
 
-    private fun generateTestSingBoxJson(context: Context): File {
-        val file = File(context.filesDir, "sing-box-generated.json")
+    private fun generateTunTestSingBoxJson(context: VpnService): File {
+        val file = File(context.filesDir, "sing-box-generated-tun.json")
 
         val json = """
 {
@@ -169,12 +171,26 @@ object SmartRouteEngine {
     "level": "debug",
     "timestamp": true
   },
+  "dns": {
+    "servers": [
+      {
+        "type": "udp",
+        "tag": "cloudflare",
+        "server": "1.1.1.1"
+      }
+    ],
+    "final": "cloudflare"
+  },
   "inbounds": [
     {
-      "type": "mixed",
-      "tag": "mixed-in",
-      "listen": "127.0.0.1",
-      "listen_port": 2080
+      "type": "tun",
+      "tag": "tun-in",
+      "address": [
+        "172.19.0.1/30"
+      ],
+      "auto_route": true,
+      "strict_route": false,
+      "stack": "mixed"
     }
   ],
   "outbounds": [

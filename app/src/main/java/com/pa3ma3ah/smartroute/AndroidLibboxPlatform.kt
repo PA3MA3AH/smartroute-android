@@ -1,7 +1,6 @@
 package com.pa3ma3ah.smartroute
 
-import android.content.Context
-import android.os.ParcelFileDescriptor
+import android.net.VpnService
 import io.nekohasekai.libbox.ConnectionOwner
 import io.nekohasekai.libbox.InterfaceUpdateListener
 import io.nekohasekai.libbox.LocalDNSTransport
@@ -13,11 +12,18 @@ import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
 
 class AndroidLibboxPlatform(
-    private val context: Context,
-    private val vpnInterfaceProvider: () -> ParcelFileDescriptor?
+    private val vpnService: VpnService
 ) : PlatformInterface {
     override fun autoDetectInterfaceControl(fd: Int) {
         SmartRouteLogStore.add("Platform.autoDetectInterfaceControl fd=$fd")
+
+        val protected = vpnService.protect(fd)
+
+        if (!protected) {
+            throw Exception("VpnService.protect($fd) failed")
+        }
+
+        SmartRouteLogStore.add("Platform.protect($fd) OK")
     }
 
     override fun clearDNSCache() {
@@ -54,20 +60,30 @@ class AndroidLibboxPlatform(
     override fun openTun(options: TunOptions?): Int {
         SmartRouteLogStore.add("Platform.openTun called")
 
-        val fd = vpnInterfaceProvider()
-            ?: throw Exception("VPN interface is not established")
+        val mtu = options?.mtu?.takeIf { it > 0 } ?: 1500
 
-        /*
-         * ВАЖНО:
-         * detachFd() отдаёт владение FD libbox.
-         * После этого закрывать ParcelFileDescriptor вручную уже нельзя.
-         *
-         * На текущем тестовом mixed/direct config openTun вызываться не должен.
-         * Когда перейдём к tun inbound, доработаем жизненный цикл fd.
-         */
-        val rawFd = fd.detachFd()
+        val builder = vpnService.Builder()
+            .setSession("SmartRoute")
+            .setMtu(mtu)
+            .addAddress("172.19.0.1", 30)
+            .addDnsServer("1.1.1.1")
+            .addDnsServer("8.8.8.8")
+            .addRoute("0.0.0.0", 0)
 
-        SmartRouteLogStore.add("Platform.openTun returned fd=$rawFd")
+        try {
+            builder.addDisallowedApplication(vpnService.packageName)
+            SmartRouteLogStore.add("Platform.openTun: app excluded from VPN loop")
+        } catch (e: Throwable) {
+            SmartRouteLogStore.add("Platform.openTun: failed to exclude app: ${e.message}")
+        }
+
+        val tun = builder.establish()
+            ?: throw Exception("VpnService.Builder.establish() returned null")
+
+        val rawFd = tun.detachFd()
+
+        SmartRouteLogStore.add("Platform.openTun returned fd=$rawFd mtu=$mtu")
+
         return rawFd
     }
 

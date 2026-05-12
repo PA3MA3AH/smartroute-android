@@ -6,10 +6,8 @@ import android.app.NotificationManager
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
-import android.os.ParcelFileDescriptor
 
 class SmartRouteVpnService : VpnService() {
-    private var vpnInterface: ParcelFileDescriptor? = null
     private var currentConfigPath: String = "unknown"
 
     override fun onCreate() {
@@ -43,45 +41,15 @@ class SmartRouteVpnService : VpnService() {
     }
 
     private fun startVpn() {
-        if (vpnInterface != null) {
-            SmartRouteLogStore.add("VPN interface already established")
-            SmartRouteEngine.start(this, currentConfigPath, vpnInterface)
-            return
-        }
-
-        val builder = Builder()
-            .setSession("SmartRoute")
-            .addAddress("10.10.0.2", 32)
-            .addDnsServer("1.1.1.1")
-
-        /*
-         * ВАЖНО:
-         * Пока НЕ добавляем:
-         *
-         *   addRoute("0.0.0.0", 0)
-         *
-         * Потому что engine пока не читает пакеты из VPN-интерфейса.
-         * Если добавить default route сейчас, интернет на телефоне может пропасть.
-         */
-
-        vpnInterface = builder.establish()
-
-        if (vpnInterface == null) {
-            SmartRouteLogStore.add("Failed to establish VPN interface")
-            return
-        }
-
-        SmartRouteLogStore.add("VPN interface established")
-        SmartRouteEngine.start(this, currentConfigPath, vpnInterface)
+        SmartRouteEngine.start(
+            context = this,
+            configPath = currentConfigPath
+        )
     }
 
     private fun stopVpn() {
         SmartRouteEngine.stop()
-
-        vpnInterface?.close()
-        vpnInterface = null
-
-        SmartRouteLogStore.add("VPN interface closed")
+        SmartRouteLogStore.add("VPN service stopped")
     }
 
     private fun createNotification(): Notification {
@@ -100,7 +68,7 @@ class SmartRouteVpnService : VpnService() {
 
         return Notification.Builder(this, channelId)
             .setContentTitle("SmartRoute")
-            .setContentText("VPN service is running")
+            .setContentText("SmartRoute VPN service is running")
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .build()
     }
