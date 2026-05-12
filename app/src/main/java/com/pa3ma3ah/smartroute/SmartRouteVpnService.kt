@@ -10,17 +10,20 @@ import android.os.ParcelFileDescriptor
 
 class SmartRouteVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
+    private var currentConfigPath: String = "unknown"
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(1, createNotification())
-
         if (intent?.action == ACTION_STOP) {
             stopVpn()
             stopSelf()
             return START_NOT_STICKY
         }
 
+        currentConfigPath = intent?.getStringExtra(EXTRA_CONFIG_PATH) ?: "unknown"
+
+        startForeground(1, createNotification())
         startVpn()
+
         return START_STICKY
     }
 
@@ -37,10 +40,17 @@ class SmartRouteVpnService : VpnService() {
             .addAddress("10.10.0.2", 32)
             .addDnsServer("1.1.1.1")
 
-        // ВАЖНО:
-        // Пока НЕ добавляем addRoute("0.0.0.0", 0),
-        // иначе весь интернет телефона уйдёт в VPN-интерфейс,
-        // а мы ещё не обрабатываем пакеты.
+        /*
+         * ВАЖНО:
+         * Пока НЕ добавляем:
+         *
+         *   addRoute("0.0.0.0", 0)
+         *
+         * Потому что мы ещё не подключили engine, который будет читать пакеты
+         * из VPN-интерфейса. Если добавить default route сейчас — интернет
+         * на телефоне может пропасть.
+         */
+
         vpnInterface = builder.establish()
     }
 
@@ -65,12 +75,13 @@ class SmartRouteVpnService : VpnService() {
 
         return Notification.Builder(this, channelId)
             .setContentTitle("SmartRoute")
-            .setContentText("SmartRoute VPN service is running")
+            .setContentText("VPN service is running. Config: $currentConfigPath")
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .build()
     }
 
     companion object {
         const val ACTION_STOP = "com.pa3ma3ah.smartroute.STOP"
+        const val EXTRA_CONFIG_PATH = "com.pa3ma3ah.smartroute.CONFIG_PATH"
     }
 }
