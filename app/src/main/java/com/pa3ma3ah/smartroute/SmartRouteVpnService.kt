@@ -12,14 +12,23 @@ class SmartRouteVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private var currentConfigPath: String = "unknown"
 
+    override fun onCreate() {
+        super.onCreate()
+        SmartRouteLogStore.add("VPN service created")
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            SmartRouteLogStore.add("Stop action received")
             stopVpn()
             stopSelf()
             return START_NOT_STICKY
         }
 
         currentConfigPath = intent?.getStringExtra(EXTRA_CONFIG_PATH) ?: "unknown"
+
+        SmartRouteLogStore.add("Start action received")
+        SmartRouteLogStore.add("Service config path: $currentConfigPath")
 
         startForeground(1, createNotification())
         startVpn()
@@ -28,12 +37,17 @@ class SmartRouteVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        SmartRouteLogStore.add("VPN service destroyed")
         stopVpn()
         super.onDestroy()
     }
 
     private fun startVpn() {
-        if (vpnInterface != null) return
+        if (vpnInterface != null) {
+            SmartRouteLogStore.add("VPN interface already established")
+            SmartRouteEngine.start(this, currentConfigPath, vpnInterface)
+            return
+        }
 
         val builder = Builder()
             .setSession("SmartRoute")
@@ -46,17 +60,28 @@ class SmartRouteVpnService : VpnService() {
          *
          *   addRoute("0.0.0.0", 0)
          *
-         * Потому что мы ещё не подключили engine, который будет читать пакеты
-         * из VPN-интерфейса. Если добавить default route сейчас — интернет
-         * на телефоне может пропасть.
+         * Потому что engine пока не читает пакеты из VPN-интерфейса.
+         * Если добавить default route сейчас, интернет на телефоне может пропасть.
          */
 
         vpnInterface = builder.establish()
+
+        if (vpnInterface == null) {
+            SmartRouteLogStore.add("Failed to establish VPN interface")
+            return
+        }
+
+        SmartRouteLogStore.add("VPN interface established")
+        SmartRouteEngine.start(this, currentConfigPath, vpnInterface)
     }
 
     private fun stopVpn() {
+        SmartRouteEngine.stop()
+
         vpnInterface?.close()
         vpnInterface = null
+
+        SmartRouteLogStore.add("VPN interface closed")
     }
 
     private fun createNotification(): Notification {
@@ -75,7 +100,7 @@ class SmartRouteVpnService : VpnService() {
 
         return Notification.Builder(this, channelId)
             .setContentTitle("SmartRoute")
-            .setContentText("VPN service is running. Config: $currentConfigPath")
+            .setContentText("VPN service is running")
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .build()
     }

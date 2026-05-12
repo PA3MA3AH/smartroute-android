@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -37,9 +38,11 @@ class MainActivity : ComponentActivity() {
     private val vpnPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
+                SmartRouteLogStore.add("VPN permission granted")
                 startVpnService()
                 statusState?.value = "Running"
             } else {
+                SmartRouteLogStore.add("VPN permission denied")
                 statusState?.value = "Stopped"
                 Toast.makeText(this, "VPN permission denied", Toast.LENGTH_SHORT).show()
             }
@@ -49,6 +52,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val activity = this
+
+        SmartRouteLogStore.add("MainActivity created")
 
         setContent {
             SmartRouteAndroidTheme {
@@ -87,10 +92,12 @@ class MainActivity : ComponentActivity() {
                             style = MaterialTheme.typography.bodyMedium
                         )
 
-                        Text(
-                            text = configPath,
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        SelectionContainer {
+                            Text(
+                                text = configPath,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
@@ -102,6 +109,7 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.weight(1f),
                                 onClick = {
                                     ConfigStore.saveConfig(activity, configText.value)
+                                    SmartRouteLogStore.add("Config saved")
                                     Toast.makeText(activity, "Config saved", Toast.LENGTH_SHORT).show()
                                 }
                             ) {
@@ -113,6 +121,7 @@ class MainActivity : ComponentActivity() {
                                 onClick = {
                                     configText.value = ConfigStore.exampleConfig()
                                     ConfigStore.saveConfig(activity, configText.value)
+                                    SmartRouteLogStore.add("Example config loaded")
                                     Toast.makeText(activity, "Example loaded", Toast.LENGTH_SHORT).show()
                                 }
                             ) {
@@ -130,6 +139,7 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.weight(1f),
                                 onClick = {
                                     ConfigStore.saveConfig(activity, configText.value)
+                                    SmartRouteLogStore.add("Start VPN clicked")
                                     status.value = "Starting..."
                                     requestVpnPermission()
                                 }
@@ -140,6 +150,7 @@ class MainActivity : ComponentActivity() {
                             Button(
                                 modifier = Modifier.weight(1f),
                                 onClick = {
+                                    SmartRouteLogStore.add("Stop VPN clicked")
                                     stopVpnService()
                                     status.value = "Stopped"
                                 }
@@ -150,15 +161,58 @@ class MainActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(16.dp))
 
+                        Text(
+                            text = "Config",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         OutlinedTextField(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(420.dp),
+                                .height(360.dp),
                             value = configText.value,
                             onValueChange = { configText.value = it },
                             label = { Text("config.toml") },
                             textStyle = MaterialTheme.typography.bodySmall
                         )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                modifier = Modifier.weight(1f),
+                                text = "Logs",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+
+                            Button(
+                                onClick = {
+                                    SmartRouteLogStore.clear()
+                                    SmartRouteLogStore.add("Logs cleared")
+                                }
+                            ) {
+                                Text("Clear")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        SelectionContainer {
+                            Text(
+                                modifier = Modifier.fillMaxWidth(),
+                                text = if (SmartRouteLogStore.logs.isEmpty()) {
+                                    "No logs yet"
+                                } else {
+                                    SmartRouteLogStore.logs.joinToString("\n")
+                                },
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                 }
             }
@@ -169,8 +223,10 @@ class MainActivity : ComponentActivity() {
         val intent = VpnService.prepare(this)
 
         if (intent != null) {
+            SmartRouteLogStore.add("Requesting VPN permission")
             vpnPermissionLauncher.launch(intent)
         } else {
+            SmartRouteLogStore.add("VPN permission already granted")
             startVpnService()
             statusState?.value = "Running"
         }
