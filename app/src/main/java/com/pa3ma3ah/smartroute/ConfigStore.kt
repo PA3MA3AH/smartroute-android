@@ -14,6 +14,11 @@ object ConfigStore {
         return configFile(context).absolutePath
     }
 
+    fun hasUsableConfig(context: Context): Boolean {
+        val file = configFile(context)
+        return file.exists() && file.length() > 0
+    }
+
     fun loadConfig(context: Context): String {
         val file = configFile(context)
 
@@ -30,7 +35,21 @@ object ConfigStore {
         configFile(context).writeText(text)
     }
 
+    fun saveConfig(context: Context, config: SmartRouteConfig) {
+        saveConfig(context, SmartRouteTomlWriter.write(config))
+    }
+
     fun exampleConfig(): String {
+        return """
+[general]
+mode = "socks"
+listen = "127.0.0.1"
+listen_port = 1081
+final_outbound = "direct"
+""".trimIndent()
+    }
+
+    fun vlessExampleConfig(): String {
         return """
 [general]
 mode = "socks"
