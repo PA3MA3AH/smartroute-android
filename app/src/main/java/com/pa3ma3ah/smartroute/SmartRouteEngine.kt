@@ -64,7 +64,7 @@ object SmartRouteEngine {
             SmartRouteLogStore.add("CommandServer started")
 
             server.startOrReloadService(configJson, OverrideOptions())
-            SmartRouteLogStore.add("libbox service started/reloaded")
+            SmartRouteLogStore.add("libbox service started")
 
             running = true
 
@@ -73,6 +73,11 @@ object SmartRouteEngine {
             SmartRouteLogStore.add(
                 "ERROR: failed to start libbox service: ${e::class.java.simpleName}: ${e.message}"
             )
+
+            try {
+                commandServer?.closeService()
+            } catch (_: Throwable) {
+            }
 
             try {
                 commandServer?.close()
@@ -86,35 +91,28 @@ object SmartRouteEngine {
 
     @Synchronized
     fun reloadFromConfig(context: Context, configPath: String): Boolean {
-        val server = commandServer
-
-        if (!running || server == null) {
-            SmartRouteLogStore.add("VPN is not running; config saved without live reload")
-            return false
-        }
-
-        SmartRouteLogStore.add("Live reload requested")
+        SmartRouteLogStore.add("Config saved")
 
         val configJson = try {
             generateJsonFromSmartRouteConfig(context, configPath)
         } catch (e: Throwable) {
-            SmartRouteLogStore.add("ERROR: live reload config generation failed: ${e.message}")
+            SmartRouteLogStore.add("ERROR: saved config generation failed: ${e.message}")
             return false
         }
 
         if (!checkSingBoxConfig(configJson)) {
-            SmartRouteLogStore.add("Live reload aborted: invalid config")
+            SmartRouteLogStore.add("Saved config is invalid")
             return false
         }
 
-        return try {
-            server.startOrReloadService(configJson, OverrideOptions())
-            SmartRouteLogStore.add("Live reload OK")
-            true
-        } catch (e: Throwable) {
-            SmartRouteLogStore.add("ERROR: live reload failed: ${e::class.java.simpleName}: ${e.message}")
-            false
+        if (running) {
+            SmartRouteLogStore.add("Live reload disabled for Android TUN stability")
+            SmartRouteLogStore.add("Apply changes manually: Stop VPN -> Start VPN")
+            return false
         }
+
+        SmartRouteLogStore.add("VPN is not running; config will be used on next start")
+        return false
     }
 
     @Synchronized
