@@ -10,7 +10,7 @@ object SingBoxConfigGenerator {
         root.put(
             "log",
             JSONObject()
-                .put("level", "info")
+                .put("level", "warn")
                 .put("timestamp", true)
         )
 

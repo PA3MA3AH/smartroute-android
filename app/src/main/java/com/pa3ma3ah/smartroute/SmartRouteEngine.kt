@@ -176,7 +176,7 @@ object SmartRouteEngine {
             commandServerListenPort = 0
             commandServerSecret = UUID.randomUUID().toString()
             logMaxLines = 300
-            debug = true
+            debug = false
         }
 
         Libbox.setup(options)
